@@ -1,0 +1,75 @@
+{% extends "layout/basic.html" %}
+{% block content %}
+<div class="row"><div class="section">
+  <div class="section__header" style="text-align: center">
+    <h1 class="section__title">Honor</h1>
+    {%- if canEdit -%}
+    <div class="section__toolbar">
+      <a href="/honor/edit" class="rounded primary button">{{ _('Edit') }}</a>
+    </div>
+    {%- endif -%}
+  </div>
+
+  <div class="section__body">
+    <style>
+      .honor-tabs .section__tab-header { text-align: center; }
+      .honor-venue, .honor-year { margin-top: 1em; }
+      .honor-tabs .section__table-header,
+      .honor-tabs .section__table-container {
+        position: static !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        z-index: auto !important;
+      }
+      .honor-tabs .data-table td, .honor-tabs .data-table th {
+        white-space: normal;
+        word-break: break-all;
+        overflow: visible;
+        text-overflow: clip;
+      }
+    </style>
+    <div class="section__tab-container honor-tabs">
+      <ul class="section__tabs">
+        {%- for cat in categories -%}
+        <li class="section__tab-item">
+          <h1 class="section__tab-title">{{ _(cat.name) }}</h1>
+          <div class="section__tab-main">
+            {%- if cat.records -%}
+            <table class="data-table">
+              <thead><tr><th>{{ _('Team') }}</th><th>{{ _('Competition') }}</th><th>{{ _('Members') }}</th><th>{{ _('Award') }}</th></tr></thead>
+              <tbody>{%- for r in cat.records -%}<tr>
+                <td>{{ r.team }}</td><td>{{ r.competition }}</td><td>{{ r.members|join(' / ') }}</td><td>{{ r.award }}</td>
+              </tr>{%- endfor %}</tbody>
+            </table>
+            {%- elif cat.events -%}
+            {%- for event in cat.events -%}
+            <h2 class="honor-year">{{ event.year if event.year else event.session }}</h2>
+            {%- if event.note -%}<p class="typo note">{{ event.note }}</p>{%- endif -%}
+            {%- if event.venues -%}
+            {%- for venue in event.venues -%}
+            <h3 class="honor-venue">{{ venue.name }}</h3>
+            <table class="data-table">
+              <thead><tr><th>{{ _('Team') }}</th><th>{{ _('Members') }}</th><th>{{ _('Award') }}</th></tr></thead>
+              <tbody>{%- for t in venue.teams -%}<tr>
+                <td>{{ t.team }}</td><td>{{ t.members|join(' / ') }}</td><td>{{ t.award }}</td>
+              </tr>{%- endfor %}</tbody>
+            </table>
+            {%- endfor %}
+            {%- else %}
+            <table class="data-table">
+              <thead><tr><th>{{ _('Team') }}</th><th>{{ _('Members') }}</th><th>{{ _('Award') }}</th></tr></thead>
+              <tbody>{%- for t in event.teams -%}<tr>
+                <td>{{ t.team }}</td><td>{{ t.members|join(' / ') }}</td><td>{{ t.award }}</td>
+              </tr>{%- endfor %}</tbody>
+            </table>
+            {%- endif %}
+            {%- endfor %}
+            {%- endif %}
+          </div>
+        </li>
+        {%- endfor %}
+      </ul>
+    </div>
+  </div>
+</div></div>
+{% endblock %}

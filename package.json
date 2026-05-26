@@ -1,0 +1,9 @@
+{
+  "name": "honor",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "license": "AGPL-3.0-or-later",
+  "description": "UESTC ACM-ICPC Honor Roll plugin for Hydro",
+  "preferUnplugged": true,
+  "dependencies": {}
+}

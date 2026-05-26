@@ -1,0 +1,392 @@
+{% extends "layout/basic.html" %}
+{% block content %}
+<div class="row"><div class="section honor-edit">
+  <div class="section__header">
+    <h1 class="section__title">Honor — {{ _('Edit') }}</h1>
+    <div class="section__toolbar">
+      <a href="/honor" class="rounded button">&larr; {{ _('Back') }}</a>
+      <a class="rounded primary button" onclick="var f=document.getElementById('add-form');f.style.display=f.style.display==='none'?'block':'none';return false" href="#">{{ _('Add Record') }}</a>
+    </div>
+  </div>
+
+  <div id="add-form" class="section__body" style="display:none; border-bottom:2px solid #ed5f82">
+    <h2>{{ _('Add Record') }}</h2>
+    <form id="addf" method="POST" action="/honor/manage">
+      <input type="hidden" name="action" value="add">
+      <div class="row"><div class="medium-4 columns"><label>Category <select name="cat" required>{%- for cat in categories -%}<option value="{{ loop.index0 }}">{{ _(cat.name) }}</option>{%- endfor -%}</select></label></div><div class="medium-4 columns"><label>Year/Session <input type="text" name="year" class="textbox" placeholder="e.g. 2025"></label></div><div class="medium-4 columns"><label>{{ _('Venue') }} <input type="text" name="venue" class="textbox" placeholder="e.g. EC-Final"></label></div></div>
+      <div class="row"><div class="medium-4 columns"><label>{{ _('Team') }} <input type="text" name="team" class="textbox" required></label></div><div class="medium-4 columns"><label>{{ _('Competition') }} <input type="text" name="competition" class="textbox" placeholder="World Finals only"></label></div><div class="medium-4 columns"><label>{{ _('Award') }} <input type="text" name="award" class="textbox" required></label></div></div>
+      <div class="row"><div class="medium-4 columns"><label>Member 1 <input type="text" name="member1" class="textbox"></label></div><div class="medium-4 columns"><label>Member 2 <input type="text" name="member2" class="textbox"></label></div><div class="medium-4 columns"><label>Member 3 <input type="text" name="member3" class="textbox"></label></div></div>
+      <button type="submit" class="rounded primary button" style="margin-top:1em">{{ _('Save') }}</button>
+      <button type="button" class="rounded button" onclick="document.getElementById('add-form').style.display='none'">{{ _('Cancel') }}</button>
+    </form>
+  </div>
+
+  <div class="section__body" id="honor-content">
+    <style>
+      .honor-edit .section__table-header,
+      .honor-edit .section__table-container {
+        position: static !important; box-shadow: none !important;
+        border-radius: 0 !important; z-index: auto !important;
+      }
+      .edit-actions { width: 110px; white-space: nowrap; text-align: center; }
+      .edit-btn, .sort-btn { cursor:pointer; border:none; background:none; padding:2px 4px; font-size:1.1em; }
+      .edit-btn { color:#2980b9; } .edit-btn:hover { color:#3498db; }
+      .sort-btn { color:#95a5a6; } .sort-btn:hover { color:#2c3e50; }
+      .del-btn { color:#c0392b; cursor:pointer; border:none; background:none; padding:2px 4px; font-size:1.1em; }
+      .del-btn:hover { color:#e74c3c; }
+      .honor-venue, .honor-year { margin-top:1em; }
+      .honor-edit .data-table td, .honor-edit .data-table th {
+        white-space: normal; word-break: break-all;
+        overflow: visible; text-overflow: clip; padding: 6px 8px;
+      }
+      .inline-edit { display:none; }
+      .inline-edit td { padding:4px 6px !important; }
+      .inline-edit input { width:100%; box-sizing:border-box; padding:2px 4px; font-size:0.9em; }
+      @media (max-width:768px) {
+        .honor-edit .col--members, .honor-edit .col--competition,
+        .honor-edit .edit-actions { display:none; }
+      }
+    </style>
+    <script>
+    // ========== AJAX Helper ==========
+    async function ajaxSubmit(form, onOk, e) {
+      if (e) e.preventDefault();
+      var fd = new FormData(form);
+      var url = form.getAttribute('action') || '/honor/manage';
+      try {
+        var resp = await fetch(url, { method: 'POST', body: fd });
+        var data = await resp.json();
+        if (data.ok) { window.HydroExports.Notification.success('Saved'); onOk(data); }
+        else { window.HydroExports.Notification.error(data.error || 'Operation failed'); }
+      } catch(e) { window.HydroExports.Notification.error('Network error'); }
+    }
+
+    // ========== Toggle Edit Row ==========
+    function toggleEdit(id) {
+      var r = document.getElementById('row_'+id), e = document.getElementById('edit_'+id);
+      if (!r || !e) return;
+      r.style.display = r.style.display==='none' ? '' : 'none';
+      e.style.display = e.style.display==='none' ? 'table-row' : 'none';
+    }
+
+    // ========== Edit ==========
+    function installEditForm(form) {
+      form.addEventListener('submit', function(e) {
+        var rid = this.id.replace('editf_', '');
+        ajaxSubmit(this, function() { editSuccess(rid); }, e);
+      });
+    }
+    function editSuccess(rid) {
+      var er = document.getElementById('edit_'+rid), dr = document.getElementById('row_'+rid);
+      if (!er || !dr) return;
+      var inputs = er.querySelectorAll('input[form]');
+      var cells = dr.querySelectorAll('td');
+      var hasComp = dr.querySelector('.col--competition');
+      if (hasComp) {
+        cells[0].textContent = inputs[0].value;
+        cells[2].textContent = [fixInput(inputs[1]), fixInput(inputs[2]), fixInput(inputs[3])].filter(Boolean).join(' / ') || cells[2].textContent;
+        cells[3].textContent = inputs[4].value;
+      } else {
+        cells[0].textContent = inputs[0].value;
+        cells[1].textContent = [fixInput(inputs[1]), fixInput(inputs[2]), fixInput(inputs[3])].filter(Boolean).join(' / ') || cells[1].textContent;
+        cells[2].textContent = inputs[4].value;
+      }
+      dr.style.display = ''; er.style.display = 'none';
+    }
+    function fixInput(inp) { return inp.value.trim(); }
+
+    // ========== Delete ==========
+    function installDeleteForm(form) {
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        if (!confirm('{{ _("Confirm Delete") }}?')) return;
+        var row = this.closest('tr');
+        var rid = row.id.replace('row_', '');
+        ajaxSubmit(this, function() { deleteSuccess(row, rid); });
+      });
+    }
+    function deleteSuccess(row, rid) {
+      var editRow = document.getElementById('edit_'+rid);
+      var tbody = row.parentElement;
+      row.remove(); if (editRow) editRow.remove();
+      // Remove empty groups
+      if (tbody.querySelectorAll('tr').length > 0) return;
+      var table = tbody.closest('table');
+      // Remove h4 (venue) before table if it exists
+      var h4 = table.previousElementSibling;
+      if (h4 && h4.tagName === 'H4' && h4.classList.contains('honor-venue')) h4.remove();
+      table.remove();
+      // If the container has no more tables, remove h3 (year/session)
+      var container = table.parentElement;
+      if (!container.querySelector('table.data-table')) {
+        var h3 = container.querySelector('h3.honor-year');
+        if (h3) h3.remove();
+      }
+    }
+
+    // ========== Move ==========
+    function doMove(rowId, dir) {
+      var row = document.getElementById('row_'+rowId);
+      var editRow = document.getElementById('edit_'+rowId);
+      var tbody = row.parentElement;
+      var swapRow, swapEdit;
+      if (dir === -1) {
+        // Move up: find the (display, edit) pair above
+        swapEdit = row.previousElementSibling;
+        if (!swapEdit || !swapEdit.id || !swapEdit.id.startsWith('edit_'))
+          return window.HydroExports.Notification.warn('Already at top');
+        swapRow = swapEdit.previousElementSibling;
+        if (!swapRow || !swapRow.id || !swapRow.id.startsWith('row_'))
+          return window.HydroExports.Notification.warn('Already at top');
+      } else {
+        // Move down: find the (display, edit) pair below
+        swapRow = editRow.nextElementSibling;
+        if (!swapRow || !swapRow.id || !swapRow.id.startsWith('row_'))
+          return window.HydroExports.Notification.warn('Already at bottom');
+        swapEdit = swapRow.nextElementSibling;
+        if (!swapEdit || !swapEdit.id || !swapEdit.id.startsWith('edit_'))
+          return window.HydroExports.Notification.warn('Already at bottom');
+      }
+      var form = row.querySelector('form[style*="display:none"]');
+      form.querySelector('input[name="newTeam"]').value = dir;
+
+      var fd = new FormData(form);
+      fetch(form.getAttribute('action'), { method: 'POST', body: fd }).then(function(r){ return r.json(); }).then(function(data) {
+        if (data.ok) {
+          window.HydroExports.Notification.success('Moved');
+          if (dir === -1) {
+            // Move (row, editRow) before swapRow
+            tbody.insertBefore(row, swapRow);
+            tbody.insertBefore(editRow, swapRow);
+          } else {
+            // Move (swapRow, swapEdit) before row
+            tbody.insertBefore(swapRow, row);
+            tbody.insertBefore(swapEdit, row);
+          }
+        } else {
+          window.HydroExports.Notification.error(data.error || 'Move failed');
+        }
+      }).catch(function(){ window.HydroExports.Notification.error('Network error'); });
+    }
+
+    // ========== Add ==========
+    document.getElementById('addf').addEventListener('submit', function(e) {
+      ajaxSubmit(this, addSuccess, e);
+    });
+    function addSuccess(data) {
+      if (!data.record) return;
+      var c = data.cat, y = data.year, v = data.venue, s = data.session;
+      var tbody = findOrCreateTbody(c, y, v, s);
+      var newId = 'new_' + Date.now();
+      var html = buildRowHTML(c, y || '', v || '', s || '', newId, data.record);
+      tbody.insertAdjacentHTML('beforeend', html);
+      // Install event listeners on new forms
+      var editForm = document.getElementById('editf_'+newId);
+      if (editForm) installEditForm(editForm);
+      var delForm = tbody.querySelector('#row_'+newId+' form[style*="display:inline"]');
+      if (delForm) installDeleteForm(delForm);
+      // Hide add form
+      document.getElementById('add-form').style.display = 'none';
+    }
+
+    function findOrCreateTbody(catIdx, year, venue, session) {
+      var section = document.getElementById('honor-content');
+      // Build selector to find existing tbody
+      var sel = 'tbody[data-cat="'+catIdx+'"]';
+      if (year) sel += '[data-year="'+year+'"]';
+      if (venue) sel += '[data-venue="'+venue+'"]';
+      if (session) sel += '[data-session="'+session+'"]';
+      var tbody = section.querySelector(sel);
+      if (tbody) return tbody;
+
+      // Need to create new group
+      // Find the category h2
+      var h2s = section.querySelectorAll('h2');
+      var catH2 = h2s[catIdx];
+      if (!catH2) return null;
+
+      if (session) {
+        // Sichuan: create h3 + table + tbody
+        var h3 = document.createElement('h3'); h3.className = 'honor-year'; h3.textContent = session;
+        var table = buildTable(false, catIdx, '', '', session);
+        catH2.insertAdjacentElement('afterend', h3);
+        h3.insertAdjacentElement('afterend', table);
+        return table.querySelector('tbody');
+      } else if (year) {
+        // ICPC/CCPC: find or create h3, then find or create h4, then table
+        var existH3 = section.querySelector('h3.honor-year[data-year="'+year+'"]');
+        if (!existH3) {
+          existH3 = document.createElement('h3'); existH3.className = 'honor-year';
+          existH3.textContent = year; existH3.setAttribute('data-year', year);
+          catH2.insertAdjacentElement('afterend', existH3);
+        }
+        var h4 = document.createElement('h4'); h4.className = 'honor-venue'; h4.textContent = venue;
+        var table = buildTable(false, catIdx, year, venue, '');
+        existH3.insertAdjacentElement('afterend', h4);
+        h4.insertAdjacentElement('afterend', table);
+        return table.querySelector('tbody');
+      } else {
+        // World Finals: create table + tbody after h2
+        var table = buildTable(true, catIdx, '', '', '');
+        catH2.insertAdjacentElement('afterend', table);
+        return table.querySelector('tbody');
+      }
+    }
+
+    function buildTable(wf, catIdx, year, venue, session) {
+      var html = '<table class="data-table"><thead><tr><th>{{ _("Team") }}</th>';
+      if (wf) html += '<th class="col--competition">{{ _("Competition") }}</th>';
+      html += '<th class="col--members">{{ _("Members") }}</th><th>{{ _("Award") }}</th><th class="edit-actions">Actions</th></tr></thead>';
+      html += '<tbody data-cat="'+catIdx+'"' + (year?' data-year="'+year+'"':'') + (venue?' data-venue="'+venue+'"':'') + (session?' data-session="'+session+'"':'') + '></tbody></table>';
+      var frag = document.createRange().createContextualFragment(html);
+      return frag.querySelector('table');
+    }
+
+    function buildRowHTML(catIdx, year, venue, session, rid, rec) {
+      var members = Array.isArray(rec.members) ? rec.members : [];
+      var m1 = members[0] || '', m2 = members[1] || '', m3 = members[2] || '';
+      var team = esc(rec.team), award = esc(rec.award);
+      var hasComp = rec.competition !== undefined && rec.competition !== null;
+      var hidden = '';
+      if (year && venue) {
+        hidden = '<input type="hidden" name="year" value="'+esc(year)+'"><input type="hidden" name="venue" value="'+esc(venue)+'">';
+      } else if (session) {
+        hidden = '<input type="hidden" name="session" value="'+esc(session)+'">';
+      }
+      // --- display row ---
+      var html = '<tr id="row_'+rid+'">';
+      html += '<td>'+team+'</td>';
+      if (hasComp) html += '<td class="col--competition">'+esc(rec.competition || '')+'</td>';
+      html += '<td class="col--members">'+members.map(esc).join(' / ')+'</td>';
+      html += '<td>'+award+'</td>';
+      html += '<td class="edit-actions">';
+      html += '<form method="POST" action="/honor/manage" style="display:none"><input type="hidden" name="action" value="move"><input type="hidden" name="cat" value="'+catIdx+'">'+hidden+'<input type="hidden" name="team" value="'+team+'"><input type="hidden" name="newTeam"></form>';
+      html += '<button type="button" class="sort-btn" onclick="doMove(\''+rid+'\',-1)">&uarr;</button>';
+      html += '<button type="button" class="edit-btn" onclick="toggleEdit(\''+rid+'\')">&#9998;</button><br>';
+      html += '<button type="button" class="sort-btn" onclick="doMove(\''+rid+'\',1)">&darr;</button>';
+      html += '<form method="POST" action="/honor/manage" style="display:inline"><input type="hidden" name="action" value="delete"><input type="hidden" name="cat" value="'+catIdx+'">'+hidden+'<input type="hidden" name="team" value="'+team+'"><button type="submit" class="del-btn">&#10005;</button></form>';
+      html += '</td></tr>';
+      // --- edit row ---
+      html += '<tr id="edit_'+rid+'" style="display:none">';
+      html += '<td><input form="editf_'+rid+'" name="newTeam" value="'+team+'"></td>';
+      if (hasComp) html += '<td class="col--competition">'+esc(rec.competition || '')+'</td>';
+      html += '<td class="col--members"><input form="editf_'+rid+'" name="newMember1" value="'+esc(m1)+'" placeholder="M1" style="width:30%"><input form="editf_'+rid+'" name="newMember2" value="'+esc(m2)+'" placeholder="M2" style="width:30%"><input form="editf_'+rid+'" name="newMember3" value="'+esc(m3)+'" placeholder="M3" style="width:30%"></td>';
+      html += '<td><input form="editf_'+rid+'" name="newAward" value="'+award+'"></td>';
+      html += '<td><form id="editf_'+rid+'" method="POST" action="/honor/manage" style="display:inline;margin:0"><input type="hidden" name="action" value="edit"><input type="hidden" name="cat" value="'+catIdx+'">'+hidden+'<input type="hidden" name="team" value="'+team+'"><button class="rounded primary button" style="font-size:0.8em;padding:2px 8px">{{ _("Save") }}</button></form> <button type="button" class="rounded button" style="font-size:0.8em;padding:2px 8px" onclick="toggleEdit(\''+rid+'\')">{{ _("Cancel") }}</button></td></tr>';
+      return html;
+    }
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    // ========== Install All Handlers ==========
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('form[id^="editf_"]').forEach(installEditForm);
+      document.querySelectorAll('form[style*="display:inline"]').forEach(function(f) {
+        if (f.querySelector('input[name="action"][value="delete"]')) installDeleteForm(f);
+      });
+      // Add move form intercept (prevent default submit if somehow triggered)
+      document.querySelectorAll('form[style*="display:none"]').forEach(function(f) {
+        if (f.querySelector('input[name="action"][value="move"]')) {
+          f.addEventListener('submit', function(e) { e.preventDefault(); });
+        }
+      });
+    });
+    </script>
+
+    {%- for cat in categories -%}{%- set cat_idx = loop.index0 -%}
+    <h2>{{ _(cat.name) }}</h2>
+
+    {%- if cat.records -%}
+    <table class="data-table"><thead><tr><th>{{ _('Team') }}</th><th class="col--competition">{{ _('Competition') }}</th><th class="col--members">{{ _('Members') }}</th><th>{{ _('Award') }}</th><th class="edit-actions">Actions</th></tr></thead>
+    <tbody data-cat="{{ cat_idx }}">
+    {%- for r in cat.records -%}{%- set rid = cat_idx ~ '_wf_' ~ loop.index0 -%}
+    <tr id="row_{{ rid }}">
+      <td>{{ r.team }}</td><td class="col--competition">{{ r.competition }}</td><td class="col--members">{{ r.members|join(' / ') }}</td><td>{{ r.award }}</td>
+      <td class="edit-actions">
+        <form method="POST" action="/honor/manage" style="display:none"><input type="hidden" name="action" value="move"><input type="hidden" name="cat" value="{{ cat_idx }}"><input type="hidden" name="team" value="{{ r.team }}"><input type="hidden" name="newTeam"></form>
+        <button type="button" class="sort-btn" onclick="doMove('{{ rid }}',-1)">↑</button>
+        <button type="button" class="edit-btn" onclick="toggleEdit('{{ rid }}')">✎</button><br>
+        <button type="button" class="sort-btn" onclick="doMove('{{ rid }}',1)">↓</button>
+        <form method="POST" action="/honor/manage" style="display:inline"><input type="hidden" name="action" value="delete"><input type="hidden" name="cat" value="{{ cat_idx }}"><input type="hidden" name="team" value="{{ r.team }}"><button type="submit" class="del-btn">✕</button></form>
+      </td>
+    </tr>
+    <tr id="edit_{{ rid }}" style="display:none">
+      <td><input form="editf_{{ rid }}" name="newTeam" value="{{ r.team }}"></td>
+      <td class="col--competition">{{ r.competition }}</td>
+      <td class="col--members"><input form="editf_{{ rid }}" name="newMember1" value="{{ r.members[0] if r.members[0] else '' }}" placeholder="M1" style="width:30%"><input form="editf_{{ rid }}" name="newMember2" value="{{ r.members[1] if r.members[1] else '' }}" placeholder="M2" style="width:30%"><input form="editf_{{ rid }}" name="newMember3" value="{{ r.members[2] if r.members[2] else '' }}" placeholder="M3" style="width:30%"></td>
+      <td><input form="editf_{{ rid }}" name="newAward" value="{{ r.award }}"></td>
+      <td>
+        <form id="editf_{{ rid }}" method="POST" action="/honor/manage" style="display:inline;margin:0">
+          <input type="hidden" name="action" value="edit"><input type="hidden" name="cat" value="{{ cat_idx }}"><input type="hidden" name="team" value="{{ r.team }}">
+          <button class="rounded primary button" style="font-size:0.8em;padding:2px 8px">{{ _('Save') }}</button>
+        </form>
+        <button type="button" class="rounded button" style="font-size:0.8em;padding:2px 8px" onclick="toggleEdit('{{ rid }}')">{{ _('Cancel') }}</button>
+      </td>
+    </tr>
+    {%- endfor -%}
+    </tbody></table>
+    {%- endif -%}
+
+    {%- if cat.events -%}{%- for event in cat.events -%}
+    <h3 class="honor-year">{{ event.year if event.year else event.session }}</h3>
+    {%- if event.note -%}<p class="typo note">{{ event.note }}</p>{%- endif -%}
+    {%- if event.venues -%}{%- for venue in event.venues -%}
+    <h4 class="honor-venue">{{ venue.name }}</h4>
+    <table class="data-table"><thead><tr><th>{{ _('Team') }}</th><th class="col--members">{{ _('Members') }}</th><th>{{ _('Award') }}</th><th class="edit-actions">Actions</th></tr></thead>
+    <tbody data-cat="{{ cat_idx }}" data-year="{{ event.year }}" data-venue="{{ venue.name }}">
+    {%- for t in venue.teams -%}{%- set rid = cat_idx ~ '_' ~ loop.index0 ~ '_' ~ loop.parent.loop.index0 ~ '_' ~ loop.parent.parent.loop.index0 -%}
+    <tr id="row_{{ rid }}">
+      <td>{{ t.team }}</td><td class="col--members">{{ t.members|join(' / ') }}</td><td>{{ t.award }}</td>
+      <td class="edit-actions">
+        <form method="POST" action="/honor/manage" style="display:none"><input type="hidden" name="action" value="move"><input type="hidden" name="cat" value="{{ cat_idx }}"><input type="hidden" name="year" value="{{ event.year }}"><input type="hidden" name="venue" value="{{ venue.name }}"><input type="hidden" name="team" value="{{ t.team }}"><input type="hidden" name="newTeam"></form>
+        <button type="button" class="sort-btn" onclick="doMove('{{ rid }}',-1)">↑</button>
+        <button type="button" class="edit-btn" onclick="toggleEdit('{{ rid }}')">✎</button><br>
+        <button type="button" class="sort-btn" onclick="doMove('{{ rid }}',1)">↓</button>
+        <form method="POST" action="/honor/manage" style="display:inline"><input type="hidden" name="action" value="delete"><input type="hidden" name="cat" value="{{ cat_idx }}"><input type="hidden" name="year" value="{{ event.year }}"><input type="hidden" name="venue" value="{{ venue.name }}"><input type="hidden" name="team" value="{{ t.team }}"><button type="submit" class="del-btn">✕</button></form>
+      </td>
+    </tr>
+    <tr id="edit_{{ rid }}" style="display:none">
+      <td><input form="editf_{{ rid }}" name="newTeam" value="{{ t.team }}"></td>
+      <td class="col--members"><input form="editf_{{ rid }}" name="newMember1" value="{{ t.members[0] if t.members[0] else '' }}" placeholder="M1" style="width:30%"><input form="editf_{{ rid }}" name="newMember2" value="{{ t.members[1] if t.members[1] else '' }}" placeholder="M2" style="width:30%"><input form="editf_{{ rid }}" name="newMember3" value="{{ t.members[2] if t.members[2] else '' }}" placeholder="M3" style="width:30%"></td>
+      <td><input form="editf_{{ rid }}" name="newAward" value="{{ t.award }}"></td>
+      <td>
+        <form id="editf_{{ rid }}" method="POST" action="/honor/manage" style="display:inline;margin:0">
+          <input type="hidden" name="action" value="edit"><input type="hidden" name="cat" value="{{ cat_idx }}"><input type="hidden" name="year" value="{{ event.year }}"><input type="hidden" name="venue" value="{{ venue.name }}"><input type="hidden" name="team" value="{{ t.team }}">
+          <button class="rounded primary button" style="font-size:0.8em;padding:2px 8px">{{ _('Save') }}</button>
+        </form>
+        <button type="button" class="rounded button" style="font-size:0.8em;padding:2px 8px" onclick="toggleEdit('{{ rid }}')">{{ _('Cancel') }}</button>
+      </td>
+    </tr>
+    {%- endfor -%}
+    </tbody></table>
+    {%- endfor %}{%- else -%}
+    <table class="data-table"><thead><tr><th>{{ _('Team') }}</th><th class="col--members">{{ _('Members') }}</th><th>{{ _('Award') }}</th><th class="edit-actions">Actions</th></tr></thead>
+    <tbody data-cat="{{ cat_idx }}" data-session="{{ event.session }}">
+    {%- for t in event.teams -%}{%- set rid = cat_idx ~ '_s_' ~ loop.index0 ~ '_' ~ loop.parent.loop.index0 -%}
+    <tr id="row_{{ rid }}">
+      <td>{{ t.team }}</td><td class="col--members">{{ t.members|join(' / ') }}</td><td>{{ t.award }}</td>
+      <td class="edit-actions">
+        <form method="POST" action="/honor/manage" style="display:none"><input type="hidden" name="action" value="move"><input type="hidden" name="cat" value="{{ cat_idx }}"><input type="hidden" name="session" value="{{ event.session }}"><input type="hidden" name="team" value="{{ t.team }}"><input type="hidden" name="newTeam"></form>
+        <button type="button" class="sort-btn" onclick="doMove('{{ rid }}',-1)">↑</button>
+        <button type="button" class="edit-btn" onclick="toggleEdit('{{ rid }}')">✎</button><br>
+        <button type="button" class="sort-btn" onclick="doMove('{{ rid }}',1)">↓</button>
+        <form method="POST" action="/honor/manage" style="display:inline"><input type="hidden" name="action" value="delete"><input type="hidden" name="cat" value="{{ cat_idx }}"><input type="hidden" name="session" value="{{ event.session }}"><input type="hidden" name="team" value="{{ t.team }}"><button type="submit" class="del-btn">✕</button></form>
+      </td>
+    </tr>
+    <tr id="edit_{{ rid }}" style="display:none">
+      <td><input form="editf_{{ rid }}" name="newTeam" value="{{ t.team }}"></td>
+      <td class="col--members"><input form="editf_{{ rid }}" name="newMember1" value="{{ t.members[0] if t.members[0] else '' }}" placeholder="M1" style="width:30%"><input form="editf_{{ rid }}" name="newMember2" value="{{ t.members[1] if t.members[1] else '' }}" placeholder="M2" style="width:30%"><input form="editf_{{ rid }}" name="newMember3" value="{{ t.members[2] if t.members[2] else '' }}" placeholder="M3" style="width:30%"></td>
+      <td><input form="editf_{{ rid }}" name="newAward" value="{{ t.award }}"></td>
+      <td>
+        <form id="editf_{{ rid }}" method="POST" action="/honor/manage" style="display:inline;margin:0">
+          <input type="hidden" name="action" value="edit"><input type="hidden" name="cat" value="{{ cat_idx }}"><input type="hidden" name="session" value="{{ event.session }}"><input type="hidden" name="team" value="{{ t.team }}">
+          <button class="rounded primary button" style="font-size:0.8em;padding:2px 8px">{{ _('Save') }}</button>
+        </form>
+        <button type="button" class="rounded button" style="font-size:0.8em;padding:2px 8px" onclick="toggleEdit('{{ rid }}')">{{ _('Cancel') }}</button>
+      </td>
+    </tr>
+    {%- endfor -%}
+    </tbody></table>
+    {%- endif %}{%- endfor %}{%- endif %}{%- endfor %}
+  </div>
+</div></div>
+{% endblock %}
