@@ -2,15 +2,62 @@ import { Context, Handler, PRIV, Types, param, post } from 'hydrooj';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// ---- Data model ----
+
+interface TeamRecord {
+    team: string;
+    members: string[];
+    award: string;
+}
+
+interface WorldFinalsRecord extends TeamRecord {
+    competition: string;
+}
+
+interface Venue {
+    name: string;
+    teams: TeamRecord[];
+}
+
+interface Event {
+    year?: string;
+    session?: string;
+    note?: string;
+    venues?: Venue[];
+    teams?: TeamRecord[];
+}
+
+interface Category {
+    name: string;
+    type: string;
+    total_teams?: number;
+    total_events?: number;
+    records?: WorldFinalsRecord[];
+    events?: Event[];
+}
+
+interface HonorSummary {
+    total_records: number;
+}
+
+interface HonorData {
+    source?: string;
+    institution: string;
+    summary: HonorSummary;
+    categories: Category[];
+}
+
+// ---- State ----
+
 const DATA_FILE = path.resolve(__dirname, 'honor.json');
-let honorData: any = null;
+let honorData: HonorData | null = null;
 let dataPath = DATA_FILE;
 
-function loadData(): any {
+function loadData(): HonorData {
     if (!honorData) {
-        honorData = JSON.parse(fs.readFileSync(dataPath, 'utf-8'));
+        honorData = JSON.parse(fs.readFileSync(dataPath, 'utf-8')) as HonorData;
     }
-    return honorData;
+    return honorData!;
 }
 
 function saveData() {
@@ -18,7 +65,8 @@ function saveData() {
 }
 
 // ---- Category helpers ----
-function getRecordCount(cat: any): number {
+
+function getRecordCount(cat: Category): number {
     if (cat.records) return cat.records.length;
     if (cat.events) {
         let n = 0;
@@ -32,10 +80,11 @@ function getRecordCount(cat: any): number {
 }
 
 function recalcCounts() {
+    if (!honorData) return;
     for (const cat of honorData.categories) {
         cat.total_teams = getRecordCount(cat);
     }
-    honorData.summary.total_records = honorData.categories.reduce((s: number, c: any) => s + (c.total_teams || 0), 0);
+    honorData.summary.total_records = honorData.categories.reduce((s, c) => s + (c.total_teams || 0), 0);
 }
 
 // ---- Display Handler ----
@@ -91,6 +140,7 @@ class HonorManageHandler extends Handler {
     ) {
         this.checkPriv(PRIV.PRIV_MOD_BADGE);
         loadData();
+        if (!honorData) { this.response.body = { ok: false, error: 'Data not loaded' }; return; }
         const cat = honorData.categories[catIdx];
         if (!cat) { this.response.body = { ok: false, error: 'Invalid category' }; return; }
 
@@ -114,37 +164,39 @@ class HonorManageHandler extends Handler {
             recalcCounts();
             saveData();
             this.response.body = { ok: true, action };
-        } catch (e: any) {
-            this.response.body = { ok: false, error: e.message };
+        } catch (e: unknown) {
+            this.response.body = { ok: false, error: e instanceof Error ? e.message : String(e) };
         }
     }
 
-    doAdd(cat: any, catIdx: number, year: string, venue: string, session: string,
-          team: string, m1: string, m2: string, m3: string, award: string, competition: string): any {
+    doAdd(
+        cat: Category, catIdx: number, year: string, venue: string, session: string,
+        team: string, m1: string, m2: string, m3: string, award: string, competition: string,
+    ): WorldFinalsRecord | TeamRecord | undefined {
         const members = [m1 || '', m2 || '', m3 || ''].filter(Boolean);
         if (!team || !award) throw new Error('Team and award are required');
 
         if (cat.records) {
             // World Finals
-            const rec = { team, competition: competition || '', members, award };
+            const rec: WorldFinalsRecord = { team, competition: competition || '', members, award };
             cat.records.push(rec);
             return rec;
         } else if (cat.events) {
             if (session) {
                 // Sichuan
-                let ev = cat.events.find((e: any) => e.session === session);
+                let ev = cat.events.find(e => e.session === session);
                 if (!ev) { ev = { session, teams: [] }; cat.events.push(ev); }
-                const rec = { team, members, award };
-                ev.teams.push(rec);
+                const rec: TeamRecord = { team, members, award };
+                ev.teams!.push(rec);
                 return rec;
             } else if (year && venue) {
                 // ICPC / CCPC
-                let ev = cat.events.find((e: any) => e.year === year);
+                let ev = cat.events.find(e => e.year === year);
                 if (!ev) { ev = { year, venues: [] }; cat.events.push(ev); }
                 if (ev.venues) {
-                    let v = ev.venues.find((vv: any) => vv.name === venue);
+                    let v = ev.venues.find(vv => vv.name === venue);
                     if (!v) { v = { name: venue, teams: [] }; ev.venues.push(v); }
-                    const rec = { team, members, award };
+                    const rec: TeamRecord = { team, members, award };
                     v.teams.push(rec);
                     return rec;
                 }
@@ -154,8 +206,10 @@ class HonorManageHandler extends Handler {
         }
     }
 
-    doEdit(cat: any, catIdx: number, year: string, venue: string, session: string,
-           team: string, newTeam: string, m1: string, m2: string, m3: string, award: string) {
+    doEdit(
+        cat: Category, catIdx: number, year: string, venue: string, session: string,
+        team: string, newTeam: string, m1: string, m2: string, m3: string, award: string,
+    ) {
         const members = [m1, m2, m3].filter(Boolean);
         const t = this.findTeam(cat, year, venue, session, team);
         if (!t) throw new Error('Team not found');
@@ -164,31 +218,33 @@ class HonorManageHandler extends Handler {
         if (award) t.award = award;
     }
 
-    doDelete(cat: any, catIdx: number, year: string, venue: string, session: string, team: string) {
+    doDelete(
+        cat: Category, catIdx: number, year: string, venue: string, session: string, team: string,
+    ) {
         if (cat.records) {
-            const idx = cat.records.findIndex((r: any) => r.team === team);
+            const idx = cat.records.findIndex(r => r.team === team);
             if (idx === -1) throw new Error('Team not found');
             cat.records.splice(idx, 1);
         } else if (cat.events) {
             if (session) {
                 for (const ev of cat.events) {
                     if (ev.session !== session) continue;
-                    const idx = ev.teams.findIndex((t: any) => t.team === team);
+                    const idx = ev.teams!.findIndex(t => t.team === team);
                     if (idx === -1) throw new Error('Team not found');
-                    ev.teams.splice(idx, 1);
-                    if (ev.teams.length === 0) cat.events = cat.events.filter((e: any) => e !== ev);
+                    ev.teams!.splice(idx, 1);
+                    if (ev.teams!.length === 0) cat.events = cat.events.filter(e => e !== ev);
                     return;
                 }
             } else if (year && venue) {
                 for (const ev of cat.events) {
                     if (ev.year !== year) continue;
-                    for (const v of ev.venues) {
+                    for (const v of ev.venues!) {
                         if (v.name !== venue) continue;
-                        const idx = v.teams.findIndex((t: any) => t.team === team);
+                        const idx = v.teams.findIndex(t => t.team === team);
                         if (idx === -1) throw new Error('Team not found');
                         v.teams.splice(idx, 1);
-                        if (v.teams.length === 0) ev.venues = ev.venues.filter((vv: any) => vv !== v);
-                        if (ev.venues.length === 0) cat.events = cat.events.filter((e: any) => e !== ev);
+                        if (v.teams.length === 0) ev.venues = ev.venues!.filter(vv => vv !== v);
+                        if (ev.venues!.length === 0) cat.events = cat.events.filter(e => e !== ev);
                         return;
                     }
                 }
@@ -197,45 +253,52 @@ class HonorManageHandler extends Handler {
         }
     }
 
-    doMove(cat: any, catIdx: number, year: string, venue: string, session: string, team: string, dir: number) {
+    doMove(
+        cat: Category, catIdx: number, year: string, venue: string,
+        session: string, team: string, dir: number,
+    ) {
         const arr = this.getTeamArray(cat, year, venue, session);
         if (!arr) throw new Error('Cannot find record list');
-        const idx = arr.findIndex((t: any) => t.team === team);
+        const idx = arr.findIndex(t => t.team === team);
         if (idx === -1) throw new Error('Team not found');
         const target = idx + dir;
         if (target < 0 || target >= arr.length) throw new Error('Cannot move further');
         [arr[idx], arr[target]] = [arr[target], arr[idx]];
     }
 
-    getTeamArray(cat: any, year: string, venue: string, session: string): any[] | null {
+    getTeamArray(
+        cat: Category, year: string, venue: string, session: string,
+    ): TeamRecord[] | WorldFinalsRecord[] | null {
         if (cat.records) return cat.records;
         if (cat.events) {
             if (session) {
-                for (const ev of cat.events) if (ev.session === session) return ev.teams;
+                for (const ev of cat.events) if (ev.session === session) return ev.teams || null;
             } else if (year && venue) {
                 for (const ev of cat.events) {
                     if (ev.year !== year) continue;
-                    for (const v of ev.venues) if (v.name === venue) return v.teams;
+                    for (const v of ev.venues!) if (v.name === venue) return v.teams;
                 }
             }
         }
         return null;
     }
 
-    findTeam(cat: any, year: string, venue: string, session: string, team: string): any {
-        if (cat.records) return cat.records.find((r: any) => r.team === team);
+    findTeam(
+        cat: Category, year: string, venue: string, session: string, team: string,
+    ): WorldFinalsRecord | TeamRecord | null {
+        if (cat.records) return cat.records.find(r => r.team === team) || null;
         if (cat.events) {
             if (session) {
                 for (const ev of cat.events) {
                     if (ev.session !== session) continue;
-                    return ev.teams.find((t: any) => t.team === team);
+                    return ev.teams?.find(t => t.team === team) || null;
                 }
             } else if (year && venue) {
                 for (const ev of cat.events) {
                     if (ev.year !== year) continue;
-                    for (const v of ev.venues) {
+                    for (const v of ev.venues!) {
                         if (v.name !== venue) continue;
-                        return v.teams.find((t: any) => t.team === team);
+                        return v.teams.find(t => t.team === team) || null;
                     }
                 }
             }
