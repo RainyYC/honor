@@ -140,28 +140,23 @@ class HonorManageHandler extends Handler {
         if (!team || !award) throw new Error('Team and award are required');
 
         if (cat.records) {
-            // World Finals
             const rec: WorldFinalsRecord = { team, competition: competition || '', members, award };
-            cat.records.push(rec);
+            cat.records.unshift(rec);
             return rec;
         } else if (cat.events) {
             if (session) {
-                // Sichuan
                 let ev = cat.events.find(e => e.session === session);
-                if (!ev) { ev = { session, teams: [] }; cat.events.push(ev); }
-                const rec: TeamRecord = { team, members, award };
-                ev.teams!.push(rec);
-                return rec;
+                if (!ev) { ev = { session, teams: [] }; cat.events.unshift(ev); }
+                ev.teams!.unshift({ team, members, award });
+                return ev.teams![0];
             } else if (year && venue) {
-                // ICPC / CCPC
                 let ev = cat.events.find(e => e.year === year);
-                if (!ev) { ev = { year, venues: [] }; cat.events.push(ev); }
+                if (!ev) { ev = { year, venues: [] }; cat.events.unshift(ev); }
                 if (ev.venues) {
                     let v = ev.venues.find(vv => vv.name === venue);
-                    if (!v) { v = { name: venue, teams: [] }; ev.venues.push(v); }
-                    const rec: TeamRecord = { team, members, award };
-                    v.teams.push(rec);
-                    return rec;
+                    if (!v) { v = { name: venue, teams: [] }; ev.venues.unshift(v); }
+                    v.teams.unshift({ team, members, award });
+                    return v.teams[0];
                 }
             } else {
                 throw new Error('Need year+venue or session for this category');

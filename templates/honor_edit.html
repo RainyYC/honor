@@ -13,8 +13,31 @@
     <h2>{{ _('Add Record') }}</h2>
     <form id="addf" method="POST" action="/honor/manage">
       <input type="hidden" name="action" value="add">
-      <div class="row"><div class="medium-4 columns"><label>Category <select name="cat" required>{%- for cat in categories -%}<option value="{{ loop.index0 }}">{{ _(cat.name) }}</option>{%- endfor -%}</select></label></div><div class="medium-4 columns"><label>Year/Session <input type="text" name="year" class="textbox" placeholder="e.g. 2025"></label></div><div class="medium-4 columns"><label>{{ _('Venue') }} <input type="text" name="venue" class="textbox" placeholder="e.g. EC-Final"></label></div></div>
-      <div class="row"><div class="medium-4 columns"><label>{{ _('Team') }} <input type="text" name="team" class="textbox" required></label></div><div class="medium-4 columns"><label>{{ _('Competition') }} <input type="text" name="competition" class="textbox" placeholder="World Finals only"></label></div><div class="medium-4 columns"><label>{{ _('Award') }} <input type="text" name="award" class="textbox" required></label></div></div>
+      <div class="row">
+        <div class="medium-4 columns">
+          <label>Category <select name="cat" id="add-cat" required onchange="toggleAddFields()">{%- for cat in categories -%}<option value="{{ loop.index0 }}">{{ _(cat.name) }}</option>{%- endfor -%}</select></label>
+        </div>
+        <div class="medium-4 columns add-field add-wf">
+          <label>{{ _('Competition') }} <input type="text" name="competition" class="textbox" placeholder="2024 ACM-ICPC World Finals"></label>
+        </div>
+        <div class="medium-4 columns add-field add-icpc">
+          <label>{{ _('Year') }} <input type="text" name="year" class="textbox" placeholder="2025"></label>
+        </div>
+        <div class="medium-4 columns add-field add-sc">
+          <label>{{ _('Session') }} <input type="text" name="session" class="textbox" placeholder="第十七届"></label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="medium-4 columns add-field add-icpc">
+          <label>{{ _('Venue') }} <input type="text" name="venue" class="textbox" placeholder="EC-Final"></label>
+        </div>
+        <div class="medium-4 columns">
+          <label>{{ _('Team') }} <input type="text" name="team" class="textbox" required></label>
+        </div>
+        <div class="medium-4 columns">
+          <label>{{ _('Award') }} <input type="text" name="award" class="textbox" required></label>
+        </div>
+      </div>
       <div class="row"><div class="medium-4 columns"><label>Member 1 <input type="text" name="member1" class="textbox"></label></div><div class="medium-4 columns"><label>Member 2 <input type="text" name="member2" class="textbox"></label></div><div class="medium-4 columns"><label>Member 3 <input type="text" name="member3" class="textbox"></label></div></div>
       <button type="submit" class="rounded primary button" style="margin-top:1em">{{ _('Save') }}</button>
       <button type="button" class="rounded button" onclick="document.getElementById('add-form').style.display='none'">{{ _('Cancel') }}</button>
@@ -48,6 +71,17 @@
       }
     </style>
     <script>
+    // ========== Toggle add form fields by category ==========
+    function toggleAddFields() {
+      var cat = document.getElementById('add-cat').value;
+      var wf = document.querySelectorAll('.add-wf');
+      var icpc = document.querySelectorAll('.add-icpc');
+      var sc = document.querySelectorAll('.add-sc');
+      wf.forEach(function(e) { e.style.display = cat === '0' ? '' : 'none'; });
+      icpc.forEach(function(e) { e.style.display = (cat !== '0' && cat !== '3') ? '' : 'none'; });
+      sc.forEach(function(e) { e.style.display = cat === '3' ? '' : 'none'; });
+    }
+
     // ========== AJAX Helper ==========
     async function ajaxSubmit(form, onOk, e) {
       if (e) e.preventDefault();
@@ -179,7 +213,7 @@
       var tbody = findOrCreateTbody(c, y, v, s);
       var newId = 'new_' + Date.now();
       var html = buildRowHTML(c, y || '', v || '', s || '', newId, data.record);
-      tbody.insertAdjacentHTML('beforeend', html);
+      tbody.insertAdjacentHTML('afterbegin', html);
       // Install event listeners on new forms
       var editForm = document.getElementById('editf_'+newId);
       if (editForm) installEditForm(editForm);
@@ -279,6 +313,7 @@
 
     // ========== Install All Handlers ==========
     document.addEventListener('DOMContentLoaded', function() {
+      toggleAddFields();
       document.querySelectorAll('form[id^="editf_"]').forEach(installEditForm);
       document.querySelectorAll('form[style*="display:inline"]').forEach(function(f) {
         if (f.querySelector('input[name="action"][value="delete"]')) installDeleteForm(f);
