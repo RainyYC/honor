@@ -29,21 +29,11 @@ interface Event {
 
 interface Category {
     name: string;
-    type: string;
-    total_teams?: number;
-    total_events?: number;
     records?: WorldFinalsRecord[];
     events?: Event[];
 }
 
-interface HonorSummary {
-    total_records: number;
-}
-
 interface HonorData {
-    source?: string;
-    institution: string;
-    summary: HonorSummary;
     categories: Category[];
 }
 
@@ -64,29 +54,6 @@ function saveData() {
     fs.writeFileSync(dataPath, JSON.stringify(honorData, null, 2), 'utf-8');
 }
 
-// ---- Category helpers ----
-
-function getRecordCount(cat: Category): number {
-    if (cat.records) return cat.records.length;
-    if (cat.events) {
-        let n = 0;
-        for (const e of cat.events) {
-            if (e.venues) for (const v of e.venues) n += v.teams.length;
-            if (e.teams) n += e.teams.length;
-        }
-        return n;
-    }
-    return 0;
-}
-
-function recalcCounts() {
-    if (!honorData) return;
-    for (const cat of honorData.categories) {
-        cat.total_teams = getRecordCount(cat);
-    }
-    honorData.summary.total_records = honorData.categories.reduce((s, c) => s + (c.total_teams || 0), 0);
-}
-
 // ---- Display Handler ----
 class HonorMainHandler extends Handler {
     async get() {
@@ -94,8 +61,6 @@ class HonorMainHandler extends Handler {
         this.response.template = 'honor.html';
         this.response.body = {
             categories: data.categories,
-            institution: data.institution,
-            summary: data.summary,
             canEdit: this.user.hasPriv(PRIV.PRIV_MOD_BADGE),
         };
     }
@@ -148,7 +113,6 @@ class HonorManageHandler extends Handler {
             switch (action) {
             case 'add': {
                 const record = this.doAdd(cat, catIdx, year, venue, session, team, member1, member2, member3, award, competition);
-                recalcCounts();
                 saveData();
                 this.response.body = { ok: true, action: 'add', cat: catIdx, year: year || '', venue: venue || '', session: session || '', record };
                 return;
@@ -161,7 +125,6 @@ class HonorManageHandler extends Handler {
                 this.doMove(cat, catIdx, year, venue, session, team, parseInt(newTeam) || 1); break;
             default: this.response.body = { ok: false, error: 'Unknown action' }; return;
             }
-            recalcCounts();
             saveData();
             this.response.body = { ok: true, action };
         } catch (e: unknown) {
@@ -315,10 +278,6 @@ export function apply(ctx: Context) {
     ctx.injectUI('Nav', 'honor_main', { icon: 'award' });
     ctx.i18n.load('zh', {
         'honor_main': 'Honor',
-        'World Finals': '世界总决赛',
-        'ICPC Asia Regional': 'ICPC 亚洲区竞赛',
-        'CCPC': 'CCPC 中国大学生程序设计竞赛',
-        'Sichuan Provincial Contest': '四川省大学生程序设计竞赛',
         'Team': '队伍',
         'Members': '队员',
         'Award': '奖项',
@@ -335,10 +294,6 @@ export function apply(ctx: Context) {
     });
     ctx.i18n.load('en', {
         'honor_main': 'Honor',
-        'World Finals': 'World Finals',
-        'ICPC Asia Regional': 'ICPC Asia Regional',
-        'CCPC': 'CCPC',
-        'Sichuan Provincial Contest': 'Sichuan Provincial Contest',
         'Team': 'Team',
         'Members': 'Members',
         'Award': 'Award',
