@@ -143,16 +143,13 @@
       var editRow = document.getElementById('edit_'+rid);
       var tbody = row.parentElement;
       row.remove(); if (editRow) editRow.remove();
-      // Remove empty groups
       if (tbody.querySelectorAll('tr').length > 0) return;
       var table = tbody.closest('table');
-      // Remove h4 (venue) before table if it exists
       var h4 = table.previousElementSibling;
+      var container = table.parentElement;
       if (h4 && h4.tagName === 'H4' && h4.classList.contains('honor-venue')) h4.remove();
       table.remove();
-      // If the container has no more tables, remove h3 (year/session)
-      var container = table.parentElement;
-      if (!container.querySelector('table.data-table')) {
+      if (container && !container.querySelector('table.data-table')) {
         var h3 = container.querySelector('h3.honor-year');
         if (h3) h3.remove();
       }
