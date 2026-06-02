@@ -231,7 +231,6 @@
 
     function findOrCreateTbody(catIdx, year, venue, session) {
       var section = document.getElementById('honor-content');
-      // Build selector to find existing tbody
       var sel = 'tbody[data-cat="'+catIdx+'"]';
       if (year) sel += '[data-year="'+year+'"]';
       if (venue) sel += '[data-venue="'+venue+'"]';
@@ -239,26 +238,21 @@
       var tbody = section.querySelector(sel);
       if (tbody) return tbody;
 
-      // Need to create new group
-      // Find the category h2
-      var h2s = section.querySelectorAll('h2');
-      var catH2 = h2s[catIdx];
-      if (!catH2) return null;
+      var tabMain = section.querySelectorAll('.section__tab-main')[catIdx];
+      if (!tabMain) return null;
 
       if (session) {
-        // Sichuan: create h3 + table + tbody
         var h3 = document.createElement('h3'); h3.className = 'honor-year'; h3.textContent = session;
         var table = buildTable(false, catIdx, '', '', session);
-        catH2.insertAdjacentElement('afterend', h3);
+        tabMain.insertBefore(h3, tabMain.firstChild);
         h3.insertAdjacentElement('afterend', table);
         return table.querySelector('tbody');
       } else if (year) {
-        // ICPC/CCPC: find or create h3, then find or create h4, then table
         var existH3 = section.querySelector('h3.honor-year[data-year="'+year+'"]');
         if (!existH3) {
           existH3 = document.createElement('h3'); existH3.className = 'honor-year';
           existH3.textContent = year; existH3.setAttribute('data-year', year);
-          catH2.insertAdjacentElement('afterend', existH3);
+          tabMain.insertBefore(existH3, tabMain.firstChild);
         }
         var h4 = document.createElement('h4'); h4.className = 'honor-venue'; h4.textContent = venue;
         var table = buildTable(false, catIdx, year, venue, '');
@@ -266,9 +260,8 @@
         h4.insertAdjacentElement('afterend', table);
         return table.querySelector('tbody');
       } else {
-        // World Finals: create table + tbody after h2
         var table = buildTable(true, catIdx, '', '', '');
-        catH2.insertAdjacentElement('afterend', table);
+        tabMain.insertBefore(table, tabMain.firstChild);
         return table.querySelector('tbody');
       }
     }
@@ -333,8 +326,12 @@
     });
     </script>
 
+    <div class="section__tab-container honor-tabs">
+      <ul class="section__tabs">
     {%- for cat in categories -%}{%- set cat_idx = loop.index0 -%}
-    <h2>{{ _(cat.name) }}</h2>
+        <li class="section__tab-item">
+          <h1 class="section__tab-title">{{ _(cat.name) }}</h1>
+          <div class="section__tab-main">
 
     {%- if cat.records -%}
     <table class="data-table"><thead><tr><th>{{ _('Team') }}</th><th class="col--competition">{{ _('Competition') }}</th><th class="col--members">{{ _('Members') }}</th><th>{{ _('Award') }}</th><th class="edit-actions">Actions</th></tr></thead>
@@ -427,7 +424,12 @@
     </tr>
     {%- endfor -%}
     </tbody></table>
-    {%- endif %}{%- endfor %}{%- endif %}{%- endfor %}
+    {%- endif %}{%- endfor %}{%- endif %}
+          </div>
+        </li>
+    {%- endfor %}
+      </ul>
+    </div>
   </div>
 </div></div>
 {% endblock %}
