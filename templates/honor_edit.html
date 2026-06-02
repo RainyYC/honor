@@ -145,13 +145,22 @@
       row.remove(); if (editRow) editRow.remove();
       if (tbody.querySelectorAll('tr').length > 0) return;
       var table = tbody.closest('table');
-      var h4 = table.previousElementSibling;
       var container = table.parentElement;
-      if (h4 && h4.tagName === 'H4' && h4.classList.contains('honor-venue')) h4.remove();
       table.remove();
-      if (container && !container.querySelector('table.data-table')) {
-        var h3 = container.querySelector('h3.honor-year');
-        if (h3) h3.remove();
+      cleanupHeadings(container);
+    }
+    function cleanupHeadings(container) {
+      if (!container) return;
+      var children = Array.from(container.children);
+      for (var i = children.length - 1; i >= 0; i--) {
+        var el = children[i];
+        if (el.tagName === 'H4' && el.classList.contains('honor-venue')) {
+          var nx = el.nextElementSibling;
+          if (!nx || nx.tagName !== 'TABLE') el.remove();
+        } else if (el.tagName === 'H3' && el.classList.contains('honor-year')) {
+          var ny = el.nextElementSibling;
+          if (!ny || (ny.tagName !== 'TABLE' && ny.tagName !== 'H4')) el.remove();
+        }
       }
     }
 
